@@ -7,7 +7,7 @@ import { fetchPresence } from "@/lib/presence.server";
 
 export const metadata: Metadata = {
   title: "@ world domination$",
-  description: "roster, presence, noise",
+  description: "exclusive, @wd$",
   robots: { index: false, follow: false, nocache: true },
   referrer: "no-referrer",
 };
