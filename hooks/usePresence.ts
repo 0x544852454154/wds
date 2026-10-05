@@ -37,10 +37,16 @@ export function usePresence(seed: PublicPresence[]) {
   useEffect(() => {
     let source: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
+    let cycle: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
 
     const connect = () => {
       if (closed) return;
+      // The relay is a serverless function and the platform will cut it off
+      // when its duration budget runs out. EventSource reports that as an
+      // error, so reconnect before the platform does: cycle at 8s, which sits
+      // under the 10s free-tier cap with room for cold-start drift.
+      const CYCLE_MS = 8000;
       source = new EventSource("/api/presence/stream");
 
       source.onopen = () => setConnected(true);
@@ -65,8 +71,18 @@ export function usePresence(seed: PublicPresence[]) {
       source.onerror = () => {
         setConnected(false);
         source?.close();
-        if (!closed) retry = setTimeout(connect, 3000);
+        source = null;
+        if (!closed) retry = setTimeout(connect, 1000);
       };
+
+      // Re-cycle the connection ahead of the platform's cutoff.
+      cycle = setTimeout(() => {
+        if (closed) return;
+        source?.close();
+        source = null;
+        setConnected(false);
+        retry = setTimeout(connect, 150);
+      }, CYCLE_MS);
     };
 
     connect();
@@ -74,6 +90,7 @@ export function usePresence(seed: PublicPresence[]) {
     return () => {
       closed = true;
       if (retry) clearTimeout(retry);
+      if (cycle) clearTimeout(cycle);
       source?.close();
     };
   }, [seedKey]);

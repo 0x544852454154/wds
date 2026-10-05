@@ -31,6 +31,14 @@ const SOURCE_MAP_REF = /sourceMappingURL/g;
 const MEMBER_TABLE = join(ROOT, "lib/member-table.server.ts");
 
 /**
+ * Stamped into every chunk this script writes, so a repeat run recognises its
+ * own output instead of obfuscating it a second time. Must stay a comment: a
+ * bare identifier would be evaluated at load and throw ReferenceError.
+ */
+const MARKER = "__wds_protect_1__";
+const MARKER_PROBE = `/*${MARKER}*/`;
+
+/**
  * The one thing that must never reach a client: the member table.
  *
  * Read straight from the server-only module so the tripwire cannot drift out
@@ -157,11 +165,14 @@ async function main() {
     process.exit(1);
   }
 
-  // The prerendered HTML travels to every visitor too.
-  const htmlDir = join(OUT_DIR, "server", "app");
-  for await (const file of walk(htmlDir)) {
+  // The prerendered HTML travels to every visitor too. Next names the page
+  // file after its route segment (`app/index.html`), not after the page
+  // component, so scan the whole server output rather than guessing a name.
+  let htmlScanned = 0;
+  for await (const file of walk(join(OUT_DIR, "server"))) {
     if (extname(file) !== ".html") continue;
     const source = await readFile(file, "utf8");
+    htmlScanned++;
     const found = memberIds.filter((id) => source.includes(id));
     if (found.length > 0) {
       console.error(
@@ -172,12 +183,24 @@ async function main() {
     }
   }
 
+  if (htmlScanned === 0) {
+    console.error(
+      "protect: no prerendered HTML found to scan. The member-table tripwire " +
+        "cannot verify the page payload, refusing to claim coverage.",
+    );
+    process.exit(1);
+  }
+
   // --- 2. obfuscate app chunks only -------------------------------------
+  // Obfuscation is not idempotent: a second pass over an already-obfuscated
+  // chunk inflates it further. Vercel can restore `.next` from its build cache
+  // and re-run this script, so skip any chunk this script already wrote.
   const frameworkNames = await loadFrameworkSet();
   const { default: JavaScriptObfuscator } = await import("javascript-obfuscator");
 
   let obfuscated = 0;
   let skipped = 0;
+  let alreadyDone = 0;
   let before = 0;
   let after = 0;
   let totalBytes = 0;
@@ -189,6 +212,11 @@ async function main() {
 
     if (isFramework(file, original, frameworkNames)) {
       skipped++;
+      continue;
+    }
+
+    if (original.includes(MARKER_PROBE)) {
+      alreadyDone++;
       continue;
     }
 
@@ -222,13 +250,23 @@ async function main() {
       seed: 0x5744,
     });
 
-    const output = result.getObfuscatedCode();
+    const output = `${MARKER_PROBE}${result.getObfuscatedCode()}`;
     await writeFile(file, output, "utf8");
     after += output.length;
     obfuscated++;
   }
 
+  if (alreadyDone > 0) {
+    console.log(
+      `protect: ${alreadyDone} chunk(s) already protected, left untouched (idempotency guard)`,
+    );
+  }
+
   const share = totalBytes > 0 ? before / totalBytes : 0;
+  if (appChunks.length === 0 && alreadyDone > 0) {
+    console.log("protect: nothing left to obfuscate.");
+    return;
+  }
   if (appChunks.length === 0) {
     console.error("protect: no app chunk identified, obfuscation would do nothing.");
     process.exit(1);

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "github": { "silent": true },
+  "functions": {
+    "app/api/presence/stream/route.ts": {
+      "maxDuration": 10,
+      "memory": 1024
+    },
+    "app/api/avatar/[index]/route.ts": {
+      "maxDuration": 15,
+      "memory": 512
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/presence/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate" },
+        { "key": "CDN-Cache-Control", "value": "no-store" },
+        { "key": "Vercel-CDN-Cache-Control", "value": "no-store" }
+      ]
+    }
+  ]
+}

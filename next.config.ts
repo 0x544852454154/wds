@@ -13,6 +13,15 @@ const nextConfig: NextConfig = {
   },
   generateEtags: true,
   async headers() {
+    // Serverless responses must not be CDN-cached: the SSE stream is long-lived
+    // and per-connection, and a cached variant would pin one visitor's
+    // presence onto every other visitor.
+    const noStore = [
+      { key: "Cache-Control", value: "no-store, no-cache, must-revalidate" },
+      { key: "CDN-Cache-Control", value: "no-store" },
+      { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+    ];
+
     const csp = [
       "default-src 'self'",
       // Next injects inline bootstrap scripts for hydration; the hashes are not
@@ -31,6 +40,17 @@ const nextConfig: NextConfig = {
 
     return [
       {
+        source: "/api/presence/:path*",
+        headers: noStore,
+      },
+      {
+        source: "/api/avatar/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" },
+          { key: "CDN-Cache-Control", value: "public, max-age=3600" },
+        ],
+      },
+      {
         source: "/:path*",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
@@ -44,6 +64,13 @@ const nextConfig: NextConfig = {
         ],
       },
     ];
+  },
+
+  // Serverless function sizing. The SSE relay is the only long-lived route and
+  // needs more memory than the default, since it holds a WebSocket plus an
+  // open response stream per invocation.
+  experimental: {
+    serverActions: { bodySizeLimit: "1mb" },
   },
 };
 
