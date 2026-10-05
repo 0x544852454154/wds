@@ -8,6 +8,23 @@ export const metadata: Metadata = {
   applicationName: "world domination",
   authors: [{ name: "world domination" }],
   formatDetection: { email: false, address: false, telephone: false },
+  openGraph: {
+    title: "@ world domination$",
+    description: "exclusive, @wd$",
+    type: "website",
+    images: [
+      {
+        url: "https://file.garden/am9m147l3hw3nqT1/wdsbanner.gif",
+        type: "image/gif",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "@ world domination$",
+    description: "exclusive, @wd$",
+    images: ["https://file.garden/am9m147l3hw3nqT1/wdsbanner.gif"],
+  },
 };
 
 export const viewport: Viewport = {
