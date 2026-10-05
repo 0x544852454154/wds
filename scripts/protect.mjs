@@ -130,6 +130,13 @@ function isFramework(file, source, frameworkNames) {
 }
 
 async function main() {
+  // Log the start immediately. This step runs after `next build`, so if the
+  // platform log is truncated, this line is the proof the step was entered and
+  // the exact revision of the tool doing the work.
+  console.log(
+    `protect: starting (node ${process.version}, pid ${process.pid}, cwd ${process.cwd()})`,
+  );
+
   const chunks = [];
   for await (const file of walk(OUT_DIR)) {
     if (isClientChunk(file)) chunks.push(file);
@@ -184,9 +191,14 @@ async function main() {
   }
 
   if (htmlScanned === 0) {
+    // No HTML to scan means the leak check could not run. That is a coverage
+    // gap worth failing on, not a leak, so say which it is. If a platform ever
+    // skips prerendering (or this runs against a cached .next with no page
+    // output), this would otherwise be a silent pass.
     console.error(
-      "protect: no prerendered HTML found to scan. The member-table tripwire " +
-        "cannot verify the page payload, refusing to claim coverage.",
+      "protect: no prerendered HTML found under .next/server, so the member-table " +
+        "check could not verify the page payload. Nothing is known to have leaked, " +
+        "but nothing was verified either.",
     );
     process.exit(1);
   }
@@ -268,16 +280,19 @@ async function main() {
     return;
   }
   if (appChunks.length === 0) {
-    console.error("protect: no app chunk identified, obfuscation would do nothing.");
-    process.exit(1);
+    console.warn(
+      "protect: no app chunk identified. This means only obfuscation is skipped, " +
+        "not that anything leaked. Continuing so a cosmetic step cannot fail a deploy.",
+    );
+    return;
   }
   if (share > MAX_APP_SHARE) {
-    console.error(
-      `protect: app chunks are ${(share * 100).toFixed(0)}% of the client bundle, ` +
-        `expected under ${(MAX_APP_SHARE * 100).toFixed(0)}%. Framework code was ` +
-        `probably misclassified as app code; refusing to obfuscate it.`,
+    console.warn(
+      `protect: app chunks look like ${(share * 100).toFixed(0)}% of the client bundle, ` +
+        `expected under ${(MAX_APP_SHARE * 100).toFixed(0)}%. Skipping obfuscation rather ` +
+        `than risk mangling framework code. This is not a leak.`,
     );
-    process.exit(1);
+    return;
   }
 
   const pct = before > 0 ? (((before - after) / before) * 100).toFixed(1) : "0.0";
