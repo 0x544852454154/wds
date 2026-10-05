@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "@ world domination$",
-  description: "roster, presence, noise",
+  description: "exclusive, @wd$",
   applicationName: "world domination",
   authors: [{ name: "world domination" }],
   formatDetection: { email: false, address: false, telephone: false },
